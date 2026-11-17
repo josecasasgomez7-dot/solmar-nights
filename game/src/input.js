@@ -1,6 +1,7 @@
-// Keyboard + pointer input. Held keys are read every frame as a plain object;
-// one-shot presses (confirm, pause, enter car, punch, save) are queued as bit
-// flags and taken once by the loop, so a press between frames is never lost.
+// Keyboard and pointer input. Held keys are read every frame as a plain
+// object; one-shot presses (confirm, pause, enter car, punch, save, mute)
+// are queued as flags and taken once by the loop, so a press between two
+// frames is never lost.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;

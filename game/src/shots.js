@@ -1,8 +1,8 @@
 // Screenshot scenes behind ?shot=start|play|chase|mission. Each one plays
 // the real game forward from a fresh state for a fixed number of steps,
-// steered by a simple autopilot that walks/drives toward the mission marker,
-// so the frame is what a short real game looks like and the same seed always
-// gives the same frame. No audio, no input from the player.
+// steered by a simple autopilot that walks or drives toward the mission
+// marker, so the frame is what a short real game looks like and the same
+// seed always gives the same frame. No audio, no input from the player.
 
 import { STEP } from './config.js';
 import { createGame, nearestRoadX, nearestRoadY } from './world.js';
@@ -18,7 +18,6 @@ function routeAngle(state, tx, ty) {
   const onH = Math.abs(p.y - nearestRoadY(p.y)) < 40;
   const onV = Math.abs(p.x - nearestRoadX(p.x)) < 40;
   if (!onH && !onV) {
-    // Head for the closest road line.
     const dx = nearestRoadX(p.x) - p.x, dy = nearestRoadY(p.y) - p.y;
     return Math.abs(dx) < Math.abs(dy) ? (dx > 0 ? 0 : Math.PI) : (dy > 0 ? Math.PI / 2 : -Math.PI / 2);
   }
@@ -57,6 +56,13 @@ function runFor(state, seconds, audio) {
   for (let i = 0; i < steps; i += 1) stepGame(state, autopilot(state), STEP, audio);
 }
 
+function putInParkedCar(state) {
+  const car = state.cars.find((c) => c.kind === 'parked');
+  car.kind = 'player';
+  state.player.inCar = car.id;
+  state.player.x = car.x; state.player.y = car.y;
+}
+
 export function stageShot(name, random) {
   const state = createGame(random);
   const audio = null;
@@ -69,10 +75,8 @@ export function stageShot(name, random) {
     return { state, screen: SCREEN_PLAY, best: 0 };
   }
   if (name === 'chase') {
-    // Put Mara in a car, wanted 3, police on her tail, then drive.
-    const car = state.cars.find((c) => c.kind === 'parked');
-    car.kind = 'player'; state.player.inCar = car.id;
-    state.player.x = car.x; state.player.y = car.y;
+    // Mara in a car, wanted 3, police on her tail, then drive for the pier.
+    putInParkedCar(state);
     state.wanted = 3;
     state._shotTarget = { x: 2880, y: 480 };
     state.missionMessage = '¡Persecución! Pierde a la policía.';
@@ -86,9 +90,7 @@ export function stageShot(name, random) {
   state.wanted = 2;
   state.missionMessage = 'Luz: "¡Mara, rápido! Llévame al refugio."';
   state.dialogTimer = 5;
-  const car = state.cars.find((c) => c.kind === 'parked');
-  car.kind = 'player'; state.player.inCar = car.id;
-  state.player.x = car.x; state.player.y = car.y;
+  putInParkedCar(state);
   state._shotTarget = { x: 1600, y: 1120 };
   runFor(state, 10, audio);
   return { state, screen: SCREEN_PLAY, best: 0 };

@@ -1,9 +1,9 @@
-// Solmar Nights — boot and the one loop. Input is read every frame, the game
-// advances in fixed 1/60 s steps, and the renderer paints what is there. The
-// game moves between four screens: title, play, paused and game over.
-// ?seed=N fixes the city. ?shot=start|play|chase|mission (with &seed=N)
-// stages that scene instead of running the loop, paints it twice and sets
-// window.__shotReady for a screenshot.
+// Solmar Nights v2 — boot and the one loop. Input is read every frame, the
+// game advances in fixed 1/60 s steps, and the renderer paints what is
+// there. The game moves between four screens: title, play, paused and game
+// over. ?seed=N fixes the city. ?shot=start|play|chase|mission (with
+// &seed=N) stages that scene instead of running the loop, paints it twice
+// and sets window.__shotReady for a screenshot.
 
 import { BEST_KEY, STEP } from './config.js';
 import { createRandom } from './random.js';
@@ -70,12 +70,22 @@ function runGame() {
     const saved = loadGame();
     if (!saved) { startGame(true); return; }
     state.cash = saved.cash; state.missionsDone = saved.missionsDone;
+    state.debtPaid = !!saved.debtPaid;
     state.player.health = saved.health; state.player.x = saved.x; state.player.y = saved.y;
     state.camera.x = saved.x; state.camera.y = saved.y;
+    if (Array.isArray(saved.coins)) {
+      saved.coins.forEach((taken, i) => {
+        if (state.pickups[i]) {
+          state.pickups[i].taken = !!taken;
+          if (taken) state.pickupsCollected += 1;
+        }
+      });
+    }
     startMission(state, saved.missionIndex || 0);
     state.missionStage = saved.missionStage || 'pickup';
     window.__solmar.state = state;
     screen = SCREEN_PLAY;
+    announce('Partida cargada. Sigue el encargo.');
   }
   function endGame() {
     screen = SCREEN_OVER;
@@ -85,19 +95,27 @@ function runGame() {
   let pendingEnter = false, pendingPunch = false;
   function handleActions() {
     const actions = input.takeActions();
-    if (actions & ACTION_MUTE) { const m = audio.toggleMute(); announce(m ? 'Sonido apagado.' : 'Sonido encendido.'); }
+    if (actions & ACTION_MUTE) {
+      const m = audio.toggleMute();
+      announce(m ? 'Sonido apagado.' : 'Sonido encendido.');
+    }
     if (actions & ACTION_ENTER) pendingEnter = true;
     if (actions & ACTION_PUNCH) pendingPunch = true;
     if (screen === SCREEN_TITLE || screen === SCREEN_OVER) {
       if (actions & ACTION_CONFIRM) {
         audio.unlock();
-        if (screen === SCREEN_OVER && state.over === 'failed') { startMission(state, state.missionIndex); state.over = null; screen = SCREEN_PLAY; }
-        else if (screen === SCREEN_OVER && state.over === 'complete') { startGame(true); }
-        else startGame(true);
+        if (screen === SCREEN_OVER && state.over === 'failed') {
+          startMission(state, state.missionIndex);
+          state.over = null;
+          screen = SCREEN_PLAY;
+        } else startGame(true);
       }
       return;
     }
-    if (actions & ACTION_PAUSE) { screen = screen === SCREEN_PLAY ? SCREEN_PAUSED : SCREEN_PLAY; announce(screen === SCREEN_PAUSED ? 'Pausa.' : 'Jugando.'); }
+    if (actions & ACTION_PAUSE) {
+      screen = screen === SCREEN_PLAY ? SCREEN_PAUSED : SCREEN_PLAY;
+      announce(screen === SCREEN_PAUSED ? 'Pausa.' : 'Jugando.');
+    }
     if (actions & ACTION_SAVE) { if (saveGame(state)) announce('Partida guardada.'); }
   }
 

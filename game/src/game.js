@@ -1,5 +1,5 @@
 // One fixed step of the whole game, shared by the live loop and by the
-// screenshot autopilot: world clock, missions, player, traffic, police,
+// screenshot autopilot: missions and coins, the player, traffic, police,
 // pedestrians, car collisions, health and game-over checks.
 
 import { STEP } from './config.js';
@@ -7,7 +7,7 @@ import { stepWorld } from './world.js';
 import { updatePlayer, tryEnterCar } from './player.js';
 import { updateTraffic, updatePolice, carHits } from './vehicles.js';
 import { updatePeds } from './pedestrians.js';
-import { updateMissions } from './missions.js';
+import { updateMissions, updatePickups } from './missions.js';
 import { punch } from './combat.js';
 
 export function stepGame(state, input, dt, audio, onMissionComplete) {
@@ -19,11 +19,12 @@ export function stepGame(state, input, dt, audio, onMissionComplete) {
   updatePolice(state, dt, audio);
   updatePeds(state, dt);
   carHits(state, audio);
+  updatePickups(state, audio);
   updateMissions(state, dt, audio, onMissionComplete);
   stepWorld(state, dt);
   if (state.player.health <= 0 && !state.over) state.over = 'wasted';
   if (state._siren && audio) audio.siren();
-  // Camera follows the car too.
+  // Camera follows the car too, snapped to it instead of lagging behind.
   const p = state.player;
   if (p.inCar) {
     const car = state.cars.find((c) => c.id === p.inCar);

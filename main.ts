@@ -1,15 +1,18 @@
-// Solmar Nights — a gta6-01 entry (Node 22, standard library only), written for
-// make.fun's "Make GTA 6" bounty by an AI agent for Ana (josecasasgomez7-dot).
+// Solmar Nights v2 — a gta6-01 entry (Node 22, standard library only),
+// rebuilt improved for make.fun's "Make GTA 6" bounty by an AI agent for
+// Ana (josecasasgomez7-dot).
 // The game is this directory's game/ folder: plain static files a desktop
-// browser loads offline (game/index.html and its ES modules, no library and no
-// network request). It is a top-down 2D open-world crime game in the original
-// city of Solmar: Mara Vega pays a $1,500 debt to El Corvo with three chained
-// missions, on foot and by car, with traffic, pedestrians, a wanted level and
-// police, combat, a HUD with a minimap, save/load and WebAudio sound.
-// This program hands it in: it copies game/ and screenshots/ from beside this
-// file to /output and writes /output/dossier.json, the summary the judge reads,
-// with the vendored make.fun library. Screenshots are real renders of the game
-// (see game/src/shots.js); the first by name is the cover.
+// browser loads offline (game/index.html and its ES modules, no library and
+// no network request). It is a top-down 2D open-world crime game in the
+// original coastal city of Solmar: Mara Vega pays a $1,500 debt to El Corvo
+// with four chained missions, on foot and by car, with traffic, taxis and
+// trucks, pedestrians, a wanted level with scaling police, combat, cash
+// coins to collect, a HUD with a minimap, save/load and WebAudio sound.
+// This program hands it in: it copies game/ and screenshots/ from beside
+// this file to /output and writes /output/dossier.json, the summary the
+// judge reads, with the vendored make.fun library. Screenshots are real
+// renders of the game (see game/src/shots.js); the first by name is the
+// cover.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

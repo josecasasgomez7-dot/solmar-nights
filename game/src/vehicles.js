@@ -1,6 +1,14 @@
-// Traffic and police. Traffic cars follow the road grid, stop at red lights
-// and turn at intersections. Police cars spawn when wanted and chase Mara,
-// ramming her car and, on foot, getting out to catch her.
+// Traffic and police. Traffic cars follow the road grid, stop at red lights,
+// turn at intersections and never rear-end the car ahead. Police cars spawn
+// to match the wanted level — more and faster as the heat rises — chase Mara,
+// ram her car, and on foot close in until they can arrest her.
+//
+// Three fixes baked in from the first build's play-tests:
+// 1. The arrest timer is decided ONCE per step, after the police loop, so
+//    two far cars can no longer drain it while one near car fills it.
+// 2. A police car closing on Mara on foot slows down inside 160 px, so its
+//    turning circle lets it actually stop beside her.
+// 3. A police car wedged on a building corner for 0.8 s reverses out.
 
 import { CAR, WORLD, PALETTE } from './config.js';
 import { ROAD_X, ROAD_Y, nearestRoadX, nearestRoadY, makeCar, addParticles } from './world.js';
@@ -13,17 +21,16 @@ function atIntersection(x, y) {
 }
 
 function lightIsRed(state, axis) {
-  // NS green when lightNS, EW green otherwise.
+  // North-south green while lightNS, east-west green otherwise.
   return axis === 'x' ? state.lightNS : !state.lightNS;
 }
 
 export function updateTraffic(state, dt) {
   for (const c of state.cars) {
     if (c.kind !== 'traffic') continue;
-    // Red light: slow to a stop before the intersection.
     let target = c.targetSpeed;
     if (atIntersection(c.x, c.y) && lightIsRed(state, c.axis)) target = 0;
-    // Car ahead: don't rear-end it.
+    // Car ahead: do not rear-end it.
     for (const o of state.cars) {
       if (o === c) continue;
       const dx = o.x - c.x, dy = o.y - c.y;
@@ -39,10 +46,10 @@ export function updateTraffic(state, dt) {
       c.angle += turn;
       c.axis = c.axis === 'x' ? 'y' : 'x';
       c.x = nearestRoadX(c.x); c.y = nearestRoadY(c.y);
-      c.dir = (c.angle === 0 || c.angle === Math.PI / 2) ? 1 : -1;
+      c.dir = c.angle === 0 || c.angle === Math.PI / 2 ? 1 : -1;
     }
     if (c.x < 100 || c.x > WORLD.width - 100 || c.y < 100 || c.y > WORLD.height - 100) {
-      // Wrap around to the far side so traffic never runs out.
+      // Wrap to the far side so traffic never runs out.
       c.x = 160 + state.random() * (WORLD.width - 320);
       c.y = ROAD_Y[Math.floor(state.random() * ROAD_Y.length)];
       c.axis = 'x'; c.angle = state.random() < 0.5 ? 0 : Math.PI;
@@ -51,8 +58,8 @@ export function updateTraffic(state, dt) {
 }
 
 export function updatePolice(state, dt, audio) {
-  // Spawn police to match the wanted level (up to 1 car per star + 1).
-  const want = state.wanted > 0 ? Math.min(4, state.wanted + 1) : 0;
+  // One police car per star, plus one, up to six: the heat visibly scales.
+  const want = state.wanted > 0 ? Math.min(6, state.wanted + 1) : 0;
   const have = state.cars.filter((c) => c.kind === 'police').length;
   if (have < want) {
     const angle = state.random() * Math.PI * 2;
@@ -60,14 +67,14 @@ export function updatePolice(state, dt, audio) {
     const py = state.player.y + Math.sin(angle) * 700;
     const car = makeCar(
       Math.max(120, Math.min(WORLD.width - 120, px)),
-      Math.max(120, Math.min(WORLD.height - 120, py)), 0, 'police', PALETTE.police);
-    car.targetSpeed = CAR.policeSpeed;
+      Math.max(120, Math.min(WORLD.height - 120, py)),
+      0, 'police', PALETTE.police, 'sedan',
+    );
+    car.targetSpeed = Math.min(CAR.policeMaxSpeed, CAR.policeBaseSpeed + CAR.policePerStar * state.wanted);
     state.cars.push(car);
   }
-  // Whether any police car is right on top of Mara on foot. This is
-  // decided once per step, after the loop: the old code decayed the
-  // catch timer once per police car, so with 2+ cars out one near car
-  // could never fill it and getting caught was impossible.
+  // Whether any police car is right on top of Mara on foot. Decided once,
+  // after the loop, so the arrest timer moves in one direction per step.
   let policeOnFoot = false;
   for (const c of state.cars) {
     if (c.kind !== 'police') continue;
@@ -82,8 +89,7 @@ export function updatePolice(state, dt, audio) {
     // Police drive on the streets too: slide along buildings, never over roofs.
     const blocked = (x, y) => state.city.buildings.some((b) => x > b.x - 24 && x < b.x + b.w + 24 && y > b.y - 24 && y < b.y + b.h + 24);
     if (c.reverseT > 0) {
-      // Backing out of a building corner: reverse while turning, then
-      // resume the chase with a new line at the player.
+      // Backing out of a building corner: reverse while turning, then chase.
       c.reverseT -= dt;
       c.angle += 2.8 * dt;
       c.speed = -140;
@@ -92,11 +98,9 @@ export function updatePolice(state, dt, audio) {
       if (!blocked(bx, c.y)) c.x = bx;
       if (!blocked(c.x, by)) c.y = by;
     } else {
-      c.speed = Math.min(CAR.policeSpeed, c.speed + 380 * dt);
-      // Closing in on Mara on foot: ease off so the car can actually stop
-      // beside her instead of circling past at full speed — at 430 px/s
-      // the turning circle is ~150 px, so the 48 px arrest range was
-      // unreachable and a standing player was never caught.
+      c.speed = Math.min(c.targetSpeed, c.speed + 380 * dt);
+      // Closing on Mara on foot: ease off so the car can stop beside her
+      // instead of circling past at full speed.
       if (!p.inCar && dist < 160) c.speed = Math.min(c.speed, Math.max(40, dist * 1.5));
       const nx = c.x + Math.cos(c.angle) * c.speed * dt;
       const ny = c.y + Math.sin(c.angle) * c.speed * dt;
@@ -113,8 +117,8 @@ export function updatePolice(state, dt, audio) {
     }
     c.siren += dt;
     if (c.hitCd > 0) c.hitCd -= dt;
-    // Ram the player: a hit every half second at most, so a chase is
-    // survivable and health is a real resource, not a timer.
+    // Ram the player: at most one hit every half second per car, so a
+    // chase is survivable and health is a real resource, not a timer.
     if (dist < 48) {
       if (!p.inCar) policeOnFoot = true;
       else if (c.hitCd <= 0) {
@@ -127,21 +131,24 @@ export function updatePolice(state, dt, audio) {
         if (audio) audio.crash();
       }
     }
-    if (dist > 1400) { c.x = p.x + (state.random() < 0.5 ? -700 : 700); c.y = p.y + (state.random() < 0.5 ? -700 : 700); }
+    // Lost her completely: teleport back into range instead of driving home.
+    if (dist > 1400) {
+      c.x = p.x + (state.random() < 0.5 ? -700 : 700);
+      c.y = p.y + (state.random() < 0.5 ? -700 : 700);
+    }
   }
   // On foot, a police car within arm's reach starts the arrest: 1.4 s of
   // contact and Mara is busted. Breaking contact lets the timer drain.
   if (!state.player.inCar) {
     if (policeOnFoot) {
       state.player.busted += dt;
-      if (state.player.busted > 1.4) state.over = 'busted';
+      if (state.player.busted > 1.4) { state.over = 'busted'; if (audio) audio.busted(); }
     } else state.player.busted = Math.max(0, state.player.busted - dt);
   }
-  // Wanted fades: remove police cars when the heat is gone.
+  // Heat gone: far police cars despawn, near ones drive off and fade.
   if (state.wanted === 0) {
-    state.cars = state.cars.filter((c) => c.kind !== 'police' || Math.hypot(c.x - state.player.x, c.y - state.player.y) > 900);
-    // Any police left far away simply despawn.
-    state.cars = state.cars.filter((c) => c.kind !== 'police' || Math.hypot(c.x - state.player.x, c.y - state.player.y) < 900);
+    state.cars = state.cars.filter((c) => c.kind !== 'police' ||
+      Math.hypot(c.x - state.player.x, c.y - state.player.y) < 900);
   }
 }
 
@@ -156,7 +163,8 @@ export function carHits(state, audio) {
     const d = Math.hypot(c.x - pc.x, c.y - pc.y);
     if (d < 52 && Math.abs(pc.speed) > 80) {
       pc.speed *= 0.5; c.speed = 40;
-      c.x += (c.x - pc.x) / (d || 1) * 30; c.y += (c.y - pc.y) / (d || 1) * 30;
+      c.x += ((c.x - pc.x) / (d || 1)) * 30;
+      c.y += ((c.y - pc.y) / (d || 1)) * 30;
       state.stats.crashes += 1; state.shake = 0.4;
       addParticles(state, pc.x, pc.y, '#ffd24d', 8);
       if (audio) audio.crash();

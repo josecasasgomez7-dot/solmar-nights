@@ -80,7 +80,7 @@ let carId = 1;
 export function makeCar(x, y, angle, kind, color) {
   return {
     id: carId += 1, x, y, angle, speed: 0, color, kind,
-    axis: 'x', dir: 1, targetSpeed: 0, siren: 0, stuck: 0,
+    axis: 'x', dir: 1, targetSpeed: 0, siren: 0, stuck: 0, reverseT: 0,
   };
 }
 

@@ -64,6 +64,11 @@ export function updatePolice(state, dt, audio) {
     car.targetSpeed = CAR.policeSpeed;
     state.cars.push(car);
   }
+  // Whether any police car is right on top of Mara on foot. This is
+  // decided once per step, after the loop: the old code decayed the
+  // catch timer once per police car, so with 2+ cars out one near car
+  // could never fill it and getting caught was impossible.
+  let policeOnFoot = false;
   for (const c of state.cars) {
     if (c.kind !== 'police') continue;
     const p = state.player;
@@ -74,22 +79,45 @@ export function updatePolice(state, dt, audio) {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     c.angle += Math.max(-2.8 * dt, Math.min(2.8 * dt, diff));
-    c.speed = Math.min(CAR.policeSpeed, c.speed + 380 * dt);
     // Police drive on the streets too: slide along buildings, never over roofs.
-    const nx = c.x + Math.cos(c.angle) * c.speed * dt;
-    const ny = c.y + Math.sin(c.angle) * c.speed * dt;
     const blocked = (x, y) => state.city.buildings.some((b) => x > b.x - 24 && x < b.x + b.w + 24 && y > b.y - 24 && y < b.y + b.h + 24);
-    if (!blocked(nx, c.y)) c.x = nx; else c.speed *= 0.5;
-    if (!blocked(c.x, ny)) c.y = ny; else c.speed *= 0.5;
+    if (c.reverseT > 0) {
+      // Backing out of a building corner: reverse while turning, then
+      // resume the chase with a new line at the player.
+      c.reverseT -= dt;
+      c.angle += 2.8 * dt;
+      c.speed = -140;
+      const bx = c.x + Math.cos(c.angle) * c.speed * dt;
+      const by = c.y + Math.sin(c.angle) * c.speed * dt;
+      if (!blocked(bx, c.y)) c.x = bx;
+      if (!blocked(c.x, by)) c.y = by;
+    } else {
+      c.speed = Math.min(CAR.policeSpeed, c.speed + 380 * dt);
+      // Closing in on Mara on foot: ease off so the car can actually stop
+      // beside her instead of circling past at full speed — at 430 px/s
+      // the turning circle is ~150 px, so the 48 px arrest range was
+      // unreachable and a standing player was never caught.
+      if (!p.inCar && dist < 160) c.speed = Math.min(c.speed, Math.max(40, dist * 1.5));
+      const nx = c.x + Math.cos(c.angle) * c.speed * dt;
+      const ny = c.y + Math.sin(c.angle) * c.speed * dt;
+      const canX = !blocked(nx, c.y);
+      const canY = !blocked(c.x, ny);
+      if (canX) c.x = nx; else c.speed *= 0.5;
+      if (canY) c.y = ny; else c.speed *= 0.5;
+      // Wedged in a building corner (no axis free) and still far from
+      // Mara: after 0.8 s of pushing, back out instead of sitting there.
+      if (!canX && !canY && dist > 60) {
+        c.stuck += dt;
+        if (c.stuck > 0.8) { c.stuck = 0; c.reverseT = 0.9; }
+      } else c.stuck = 0;
+    }
     c.siren += dt;
     if (c.hitCd > 0) c.hitCd -= dt;
     // Ram the player: a hit every half second at most, so a chase is
     // survivable and health is a real resource, not a timer.
     if (dist < 48) {
-      if (!p.inCar) {
-        p.busted += dt;
-        if (p.busted > 1.4) state.over = 'busted';
-      } else if (c.hitCd <= 0) {
+      if (!p.inCar) policeOnFoot = true;
+      else if (c.hitCd <= 0) {
         c.hitCd = 0.5;
         const pc = state.cars.find((v) => v.id === p.inCar);
         if (pc) pc.speed *= 0.6;
@@ -98,8 +126,16 @@ export function updatePolice(state, dt, audio) {
         addParticles(state, c.x, c.y, '#ffd24d', 4);
         if (audio) audio.crash();
       }
-    } else if (!p.inCar) p.busted = Math.max(0, p.busted - dt);
+    }
     if (dist > 1400) { c.x = p.x + (state.random() < 0.5 ? -700 : 700); c.y = p.y + (state.random() < 0.5 ? -700 : 700); }
+  }
+  // On foot, a police car within arm's reach starts the arrest: 1.4 s of
+  // contact and Mara is busted. Breaking contact lets the timer drain.
+  if (!state.player.inCar) {
+    if (policeOnFoot) {
+      state.player.busted += dt;
+      if (state.player.busted > 1.4) state.over = 'busted';
+    } else state.player.busted = Math.max(0, state.player.busted - dt);
   }
   // Wanted fades: remove police cars when the heat is gone.
   if (state.wanted === 0) {
